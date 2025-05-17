@@ -2,6 +2,7 @@ ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
 all:
+	
 	$(MAKE) -C basic
 	$(MAKE) -C demo
 	$(MAKE) -C dogfood
@@ -48,6 +49,7 @@ run-rtlsim:
 	$(MAKE) -C conv3x run-rtlsim
 	$(MAKE) -C sgemm2x run-rtlsim
 	$(MAKE) -C stencil3d run-rtlsim
+	$(MAKE) -C hotspot run-rtlsim
 
 clean:
 	$(MAKE) -C basic clean

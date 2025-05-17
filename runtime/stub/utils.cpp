@@ -160,7 +160,6 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t total_instrs = 0;
   uint64_t total_cycles = 0;
   uint64_t max_cycles = 0;
-
   auto calcRatio = [&](uint64_t part, uint64_t total)->int {
     if (total == 0)
       return 0;
@@ -212,8 +211,13 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   uint64_t mem_writes = 0;
   uint64_t mem_lat = 0;
   uint64_t mem_bank_stalls = 0;
-
+// PERF: CLASS_3
+  uint64_t total_issued_warps = 0;
+  uint64_t total_active_threads = 0;
   uint64_t num_cores;
+  uint64_t branch_instructions = 0;
+  uint64_t branch_mispredictions = 0;
+
   CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_CORES, &num_cores), {
     return err;
   });
@@ -233,6 +237,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   bool l2cache_enable = isa_flags & VX_ISA_EXT_L2CACHE;
   bool l3cache_enable = isa_flags & VX_ISA_EXT_L3CACHE;
   bool lmem_enable    = isa_flags & VX_ISA_EXT_LMEM;
+  fprintf(stderr, "DEBUG: l2cache_enable = %d, isa_flags = 0x%lx\n", l2cache_enable ? 1 : 0, isa_flags);
 
   auto perf_class = get_profiling_mode();
 
@@ -241,13 +246,79 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MCYCLE, core_id, &cycles_per_core), {
       return err;
     });
+    fprintf(stream, "number of cycles of core %d = %lu \n", core_id, cycles_per_core);
 
     uint64_t instrs_per_core;
     CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MINSTRET, core_id, &instrs_per_core), {
       return err;
     });
+    fprintf(stream, "number of cycles of core %d = %lu \n", core_id, instrs_per_core);
 
     switch (perf_class) {
+     case VX_DCR_MPM_CLASS_3:
+	{
+	  uint64_t threads_per_warp;
+	  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &threads_per_warp), {
+	    return err;
+	  });
+	  // Retrieve total_issued_warps and total_active_threads for each core
+	fprintf(stderr,"DEBUG: threads_per_warp = %lu\n", threads_per_warp);
+	  // Query total_issued_warps for the core
+	  uint64_t total_issued_warps_per_core;
+	  CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_TOTAL_ISSUED_WARPS, core_id, &total_issued_warps_per_core), {
+	    return err;
+	  });
+	  fprintf(stderr,"DEBUG: core%d total_issued_warps = %lu\n", core_id, total_issued_warps_per_core);
+	  // Query total_active_threads for the core
+	  uint64_t total_active_threads_per_core;
+	  CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_TOTAL_ACTIVE_THREADS, core_id, &total_active_threads_per_core), {
+	    return err;
+	  });
+	  fprintf(stderr,"DEBUG: core%d total_active_threads = %lu\n", core_id, total_active_threads_per_core);
+	  // Print total_issued_warps and total_active_threads
+	  if (num_cores > 1) {
+	    // Calculate and print warp efficiency
+	    int warp_efficiency = calcAvgPercent(total_active_threads_per_core, total_issued_warps_per_core * threads_per_warp);
+	    fprintf(stream, "PERF: core%d: Warp Efficiency=%d%%\n", core_id, warp_efficiency);
+      fprintf(stream, "total active threads per core = %lu \n ", total_active_threads_per_core);
+	  }
+
+	  // Accumulate totals for all cores
+	  total_issued_warps += total_issued_warps_per_core;
+	  total_active_threads += total_active_threads_per_core;
+	}
+	break;
+    case VX_DCR_MPM_CLASS_BRANCH:
+  {
+  // Query branch instructions for the core
+  uint64_t branch_instructions_per_core;
+  CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_BRANCH_INSTRUCTIONS, core_id, &branch_instructions_per_core), {
+    return err;
+  });
+  fprintf(stderr,"DEBUG: core%d branch instructions per core = %lu\n", core_id, branch_instructions_per_core);
+
+  // Query branch mispredictions for the core
+  uint64_t branch_mispredictions_per_core;
+  CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_BRANCH_MISPREDICTIONS, core_id, &branch_mispredictions_per_core), {
+    return err;
+  });
+  fprintf(stderr,"DEBUG: core%d branch mispredictions per core = %lu\n", core_id, branch_mispredictions_per_core);
+
+  // Calculate and print branch prediction accuracy
+  if (branch_instructions_per_core > 1) {
+    int branch_accuracy = 100 - calcAvgPercent(branch_mispredictions_per_core, branch_instructions_per_core);
+    fprintf(stream, "PERF: core%d: Branch Accuracy=%d%% (%ld/%ld)\n", 
+            core_id, branch_accuracy, 
+            branch_instructions_per_core - branch_mispredictions_per_core, 
+            branch_instructions_per_core);
+  }
+
+  // Accumulate totals for all cores
+  branch_instructions += branch_instructions_per_core;
+  branch_mispredictions += branch_mispredictions_per_core;
+}
+break;
+
     case VX_DCR_MPM_CLASS_CORE: {
       // PERF: pipeline
       // scheduler idles
@@ -286,7 +357,19 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         }
         ibuffer_stalls += ibuffer_stalls_per_core;
       }
-      // scoreboard stalls
+      //scoreboard stalls
+      fprintf(stream, "\n");
+      fprintf(stream, "sched idle = %lu \n ", sched_idles);
+      fprintf(stream, "sched_stalls: %lu\n", sched_stalls);
+      fprintf(stream, "ibuffer_stalls: %lu\n", ibuffer_stalls);
+      fprintf(stream, "scrb_stalls: %lu\n", scrb_stalls);
+      fprintf(stream, "opds_stalls: %lu\n", opds_stalls);
+
+      fprintf(stream, "ifetches: %lu\n", ifetches);
+      fprintf(stream, "loads: %lu\n", loads);
+      fprintf(stream, "stores: %lu\n", stores);
+      fprintf(stream, "ifetch_lat: %lu\n", ifetch_lat);
+      fprintf(stream, "load_lat: %lu\n", load_lat);
       {
         uint64_t scrb_stalls_per_core;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_SCRB_ST, core_id, &scrb_stalls_per_core), {
@@ -317,6 +400,11 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
         scrb_lsu += scrb_lsu_per_core;
         scrb_csrs += scrb_csrs_per_core;
         scrb_wctl += scrb_wctl_per_core;
+        fprintf(stream, "scrb_alu: %lu\n", scrb_alu);
+        fprintf(stream, "scrb_fpu: %lu\n", scrb_fpu);
+        fprintf(stream, "scrb_lsu: %lu\n", scrb_lsu);
+        fprintf(stream, "scrb_csrs: %lu\n", scrb_csrs);
+        fprintf(stream, "scrb_wctl: %lu\n", scrb_wctl);
         if (num_cores > 1) {
           uint64_t scrb_total = scrb_alu_per_core + scrb_fpu_per_core + scrb_lsu_per_core + scrb_csrs_per_core + scrb_wctl_per_core;
           int scrb_percent_per_core = calcAvgPercent(scrb_stalls_per_core, cycles_per_core);
@@ -485,38 +573,44 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       int coalescer_utilization = calcAvgPercent(dcache_requests_per_core - coalescer_misses, dcache_requests_per_core);
       fprintf(stream, "PERF: core%d: coalescer misses=%ld (hit ratio=%d%%)\n", core_id, coalescer_misses, coalescer_utilization);
 
-      if (l2cache_enable) {
+      if (true) {
         // PERF: L2cache
         uint64_t tmp;
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_READS, core_id, &tmp), {
           return err;
         });
         l2cache_reads += tmp;
+        fprintf(stream, "l2cache_reads = %lu \n ", l2cache_reads);
 
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_WRITES, core_id, &tmp), {
           return err;
         });
         l2cache_writes += tmp;
+        fprintf(stream, "l2cache_writes = %lu \n ", l2cache_writes);
 
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_R, core_id, &tmp), {
           return err;
         });
         l2cache_read_misses += tmp;
+        fprintf(stream, "l2cache_read_misses = %lu \n ", l2cache_read_misses);
 
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MISS_W, core_id, &tmp), {
           return err;
         });
         l2cache_write_misses += tmp;
+        fprintf(stream, "l2cache_write_misses = %lu \n ", l2cache_write_misses);
 
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_BANK_ST, core_id, &tmp), {
           return err;
         });
         l2cache_bank_stalls += tmp;
+        fprintf(stream, "l2cache_bank_stalls = %lu \n ", l2cache_bank_stalls);
 
         CHECK_ERR(vx_mpm_query(hdevice, VX_CSR_MPM_L2CACHE_MSHR_ST, core_id, &tmp), {
           return err;
         });
         l2cache_mshr_stalls += tmp;
+        fprintf(stream, "l2cache_mshr_stalls = %lu \n ", l2cache_mshr_stalls);
       }
       if (0 == core_id) {
         if (l3cache_enable) {
@@ -567,6 +661,28 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
   }
 
   switch (perf_class) {
+  case VX_DCR_MPM_CLASS_3: {
+	  uint64_t threads_per_warp;
+	  CHECK_ERR(vx_dev_caps(hdevice, VX_CAPS_NUM_THREADS, &threads_per_warp), {
+	    return err;
+	  });
+	  // Calculate and print warp efficiency
+	  int warp_efficiency = calcAvgPercent(total_active_threads, total_issued_warps * threads_per_warp);
+	  fprintf(stream, "PERF: Warp Efficiency=%d%%\n", warp_efficiency);
+	} break;
+  case VX_DCR_MPM_CLASS_BRANCH: {
+  // Calculate and print overall branch prediction accuracy
+  if (branch_instructions > 0) {
+    int branch_accuracy = 100 - calcAvgPercent(branch_mispredictions, branch_instructions);
+    fprintf(stream, "PERF: Branch Prediction Accuracy=%d%% (%ld/%ld)\n", 
+            branch_accuracy, 
+            branch_instructions - branch_mispredictions, 
+            branch_instructions);
+  } else {
+    fprintf(stream, "PERF: No branch instructions executed\n");
+  }
+}
+break;
   case VX_DCR_MPM_CLASS_CORE: {
     int sched_idles_percent = calcAvgPercent(sched_idles, total_cycles);
     int sched_stalls_percent = calcAvgPercent(sched_stalls, total_cycles);
@@ -596,7 +712,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
     fprintf(stream, "PERF: load latency=%d cycles\n", load_avg_lat);
   } break;
   case VX_DCR_MPM_CLASS_MEM: {
-    if (l2cache_enable) {
+    if (true) {
       l2cache_reads /= num_cores;
       l2cache_writes /= num_cores;
       l2cache_read_misses /= num_cores;
@@ -615,7 +731,7 @@ extern int vx_dump_perf(vx_device_h hdevice, FILE* stream) {
       fprintf(stream, "PERF: l2cache mshr stalls=%ld (utilization=%d%%)\n", l2cache_mshr_stalls, mshr_utilization);
     }
 
-    if (l3cache_enable) {
+    if (true) {
       int read_hit_ratio = calcRatio(l3cache_read_misses, l3cache_reads);
       int write_hit_ratio = calcRatio(l3cache_write_misses, l3cache_writes);
       int bank_utilization = calcAvgPercent(l3cache_reads + l3cache_writes, l3cache_reads + l3cache_writes + l3cache_bank_stalls);

@@ -98,12 +98,13 @@
 `endif
 
 `ifndef NUM_WARPS
-`define NUM_WARPS 4
+`define NUM_WARPS 8
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 4
+`define NUM_THREADS 8
 `endif
+
 
 `ifndef NUM_BARRIERS
 `define NUM_BARRIERS `UP(`NUM_WARPS/2)

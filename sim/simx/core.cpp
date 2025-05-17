@@ -193,22 +193,110 @@ void Core::tick() {
   DPN(2, std::flush);
 }
 
+// void Core::schedule() {
+//   auto trace = emulator_.step();
+//   if (trace == nullptr) {
+//     ++perf_stats_.sched_idle;
+//     return;
+//   }
+  
+//   // Debug print stays but we'll also try our new branch detection
+//   std::cout << "Instruction info: fu_type=" << (int)trace->fu_type
+//             << ", alu_type=" << (trace->fu_type == FUType::ALU ? (int)trace->alu_type : -1)
+//             << ", xtype=" << (trace->fu_type == FUType::ALU ? (int)trace->op_args.alu.xtype : -1)
+//             << std::endl;
+
+//   // suspend warp until decode
+//   emulator_.suspend(trace->wid);
+//   // track active threads
+//   perf_stats_.total_issued_warps += 1;
+//   perf_stats_.total_active_threads += trace->tmask.count();
+
+//   // Check if this is an ALU branch instruction
+//   if (trace->fu_type == FUType::ALU && trace->op_args.alu.xtype == ALU_TYPE_BRANCH) { 
+//     std::cout << "Detected branch: predicted=" << trace->predicted_taken
+//     << ", actual=" << trace->actually_taken << std::endl; // 1 is likely ALU_TYPE_BRANCH
+//     perf_stats_.branch_instructions += 1;
+//     if (trace->predicted_taken != trace->actually_taken) {
+//       perf_stats_.branch_mispredictions += 1;
+//     }
+//   }
+  
+//   DT(3, "pipeline-schedule: " << *trace);
+
+//   // advance to fetch stage
+//   fetch_latch_.push(trace);
+//   ++pending_instrs_;
+// }
+
+// void Core::schedule() {
+//   auto trace = emulator_.step();
+//   if (trace == nullptr) {
+//     ++perf_stats_.sched_idle;
+//     return;
+//   }
+
+//   // suspend warp until decode
+//   emulator_.suspend(trace->wid);
+//   // track active threads
+//   perf_stats_.total_issued_warps += 1;
+//   perf_stats_.total_active_threads += trace->tmask.count();
+
+//   // Try different values for xtype to detect branch instructions
+//   if (trace->fu_type == FUType::ALU) {
+//     for (int xtype = 1; xtype <= 3; ++xtype) {
+//       if (trace->op_args.alu.xtype == xtype) {
+//         perf_stats_.branch_instructions += 1;
+//         if (trace->predicted_taken != trace->actually_taken) {
+//           perf_stats_.branch_mispredictions += 1;
+//         }
+//       }
+//     }
+//   }
+  
+//   DT(3, "pipeline-schedule: " << *trace);
+
+//   // advance to fetch stage
+//   fetch_latch_.push(trace);
+//   ++pending_instrs_;
+// }
+
 void Core::schedule() {
-  auto trace = emulator_.step();
-  if (trace == nullptr) {
-    ++perf_stats_.sched_idle;
-    return;
-  }
+    auto trace = emulator_.step();
+    if (trace == nullptr) {
+        ++perf_stats_.sched_idle;
+        return;
+    }
 
-  // suspend warp until decode
-  emulator_.suspend(trace->wid);
+  
 
-  DT(3, "pipeline-schedule: " << *trace);
+    // Suspend warp until decode stage
+    emulator_.suspend(trace->wid);
 
-  // advance to fetch stage
-  fetch_latch_.push(trace);
-  ++pending_instrs_;
+    // Track active threads
+    perf_stats_.total_issued_warps += 1;
+    perf_stats_.total_active_threads += trace->tmask.count();
+
+    // Detect branch instructions and update counters
+ /*   if (trace->fu_type == FUType::ALU && trace->op_args.alu.xtype == ALU_TYPE_BRANCH) {
+  
+    perf_stats_.branch_instructions += 1;
+    if (trace->predicted_taken != trace->actually_taken) {
+        perf_stats_.branch_mispredictions += 1;
+    }
+    DP(3, "Branch instruction detected: " 
+            << "PC=0x" << std::hex << trace->PC << std::dec 
+            << ", predicted=" << trace->predicted_taken 
+            << ", actual=" << trace->actually_taken 
+            << ", correct=" << (trace->predicted_taken == trace->actually_taken));
+}*/
+
+     DT(3, "pipeline-schedule: " << *trace);
+    // Advance to fetch stage
+    fetch_latch_.push(trace);
+    ++pending_instrs_;
 }
+
 
 void Core::fetch() {
   perf_stats_.ifetch_latency += pending_ifetches_;
@@ -360,6 +448,34 @@ void Core::issue() {
   ++ibuffer_idx_;
 }
 
+// void Core::execute() {
+//   for (uint32_t i = 0; i < (uint32_t)FUType::Count; ++i) {
+//     auto& dispatch = dispatchers_.at(i);
+//     auto& func_unit = func_units_.at(i);
+//     for (uint32_t j = 0; j < ISSUE_WIDTH; ++j) {
+//       if (dispatch->Outputs.at(j).empty())
+//         continue;
+//       auto trace = dispatch->Outputs.at(j).front();
+//     //  if (trace->fu_type == FUType::ALU && trace->op_type == ALU_TYPE_BRANCH) {
+//     //     // Increment branch instruction counter
+//     //     perf_stats_.branch_instructions += 1;
+        
+//     //     // Compare prediction with actual outcome
+//     //     bool predicted_taken = trace->predicted_taken;
+//     //     bool actually_taken = trace->actually_taken;
+        
+//     //     // Record misprediction if they don't match
+//     //     if (predicted_taken != actually_taken) {
+//     //       perf_stats_.branch_mispredictions += 1;
+//     //     }
+//     //   }
+
+//       func_unit->Inputs.at(j).push(trace, 2);
+//       dispatch->Outputs.at(j).pop();
+//     }
+//   }
+// }
+
 void Core::execute() {
   for (uint32_t i = 0; i < (uint32_t)FUType::Count; ++i) {
     auto& dispatch = dispatchers_.at(i);
@@ -368,6 +484,14 @@ void Core::execute() {
       if (dispatch->Outputs.at(j).empty())
         continue;
       auto trace = dispatch->Outputs.at(j).front();
+      
+      /*if (trace->fu_type == FUType::ALU && trace->op_args.alu.xtype == 1) {  // 1 is likely ALU_TYPE_BRANCH
+        perf_stats_.branch_instructions += 1;
+        if (trace->predicted_taken != trace->actually_taken) {
+          perf_stats_.branch_mispredictions += 1;
+        }
+      }*/
+
       func_unit->Inputs.at(j).push(trace, 2);
       dispatch->Outputs.at(j).pop();
     }

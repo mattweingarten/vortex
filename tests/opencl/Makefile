@@ -22,8 +22,15 @@ all:
 	$(MAKE) -C kmeans
 	$(MAKE) -C blackscholes
 	$(MAKE) -C bfs
+	$(MAKE) -C aes
+	$(MAKE) -C hotspot
+	$(MAKE) -C pathfinder
+
+	
+
 
 run-simx:
+	$(MAKE) -C aes run-simx
 	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C sgemm run-simx
 	$(MAKE) -C conv3 run-simx
@@ -43,8 +50,12 @@ run-simx:
 	$(MAKE) -C kmeans run-simx
 	$(MAKE) -C blackscholes run-simx
 	$(MAKE) -C bfs run-simx
+	$(MAKE) -C hotspot run-simx
+	$(MAKE) -C pathfinder run-simx
+
 
 run-rtlsim:
+	$(MAKE) -C aes run-rtlsim
 	$(MAKE) -C vecadd run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
 	$(MAKE) -C conv3 run-rtlsim
@@ -64,8 +75,11 @@ run-rtlsim:
 	$(MAKE) -C kmeans run-rtlsim
 	$(MAKE) -C blackscholes run-rtlsim
 	$(MAKE) -C bfs run-rtlsim
+	$(MAKE) -C hotspot run-rtlsim
+	$(MAKE) -C pathfinder run-rtlsim
 
 clean:
+	$(MAKE) -C aes clean
 	$(MAKE) -C vecadd clean
 	$(MAKE) -C sgemm clean
 	$(MAKE) -C conv3 clean
@@ -76,7 +90,7 @@ clean:
 	$(MAKE) -C sgemm3 clean
 	$(MAKE) -C psum clean
 	$(MAKE) -C oclprintf clean
-	$(MAKE) -C dotproduct clean
+	$(MAKE) -C dotproduct cleans
 	$(MAKE) -C transpose clean
 	$(MAKE) -C spmv clean
 	$(MAKE) -C stencil clean
@@ -86,3 +100,5 @@ clean:
 	$(MAKE) -C kmeans clean
 	$(MAKE) -C blackscholes clean
 	$(MAKE) -C bfs clean
+	$(MAKE) -C hotspot clean
+	$(MAKE) -C pathfinder clean

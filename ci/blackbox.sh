@@ -93,13 +93,18 @@ set_driver_path() {
 }
 
 set_app_path() {
+    echo "path0"
     if [ -d "$ROOT_DIR/tests/opencl/$APP" ]; then
+        echo "path1"
         APP_PATH="$ROOT_DIR/tests/opencl/$APP"
     elif [ -d "$ROOT_DIR/tests/regression/$APP" ]; then
         APP_PATH="$ROOT_DIR/tests/regression/$APP"
+        echo "path 2"
     else
         echo "Application folder not found: $APP"
+        echo "$APP_PATH"
         exit 1
+
     fi
 }
 
@@ -149,6 +154,7 @@ run_app() {
 main() {
     parse_args "$@"
     set_driver_path
+    echo "setting up app path"
     set_app_path
 
     # execute on default installed GPU

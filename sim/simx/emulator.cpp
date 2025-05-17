@@ -251,6 +251,8 @@ void Emulator::suspend(uint32_t wid) {
   stalled_warps_.set(wid);
 }
 
+
+
 void Emulator::resume(uint32_t wid) {
   if (wid != 0xffffffff) {
     assert(stalled_warps_.test(wid));
@@ -530,6 +532,8 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
 
   CSR_READ_64(VX_CSR_MCYCLE, core_perf.cycles);
   CSR_READ_64(VX_CSR_MINSTRET, core_perf.instrs);
+  CSR_READ_64(VX_CSR_MPM_BRANCH_INSTRUCTIONS, core_perf.branch_instructions);
+  CSR_READ_64(VX_CSR_MPM_BRANCH_MISPREDICTIONS, core_perf.branch_mispredictions);
   default:
     if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
@@ -538,6 +542,20 @@ Word Emulator::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
       switch (perf_class) {
       case VX_DCR_MPM_CLASS_NONE:
         break;
+      case VX_DCR_MPM_CLASS_3: {
+	  // Add your custom counters here for Class 3:
+	  switch (addr){
+	  CSR_READ_64(VX_CSR_MPM_TOTAL_ISSUED_WARPS, core_perf.total_issued_warps);
+	  CSR_READ_64(VX_CSR_MPM_TOTAL_ACTIVE_THREADS, core_perf.total_active_threads);
+    CSR_READ_64(VX_CSR_MPM_BRANCH_INSTRUCTIONS, core_perf.branch_instructions);
+    CSR_READ_64(VX_CSR_MPM_BRANCH_MISPREDICTIONS, core_perf.branch_mispredictions);
+	  }
+	} break;
+      case VX_DCR_MPM_CLASS_BRANCH: {
+      // Add branch prediction counters here:
+      CSR_READ_64(VX_CSR_MPM_BRANCH_INSTRUCTIONS, core_perf.branch_instructions);
+      CSR_READ_64(VX_CSR_MPM_BRANCH_MISPREDICTIONS, core_perf.branch_mispredictions);
+      } break;
       case VX_DCR_MPM_CLASS_CORE: {
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_SCHED_ID, core_perf.sched_idle);

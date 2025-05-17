@@ -35,6 +35,9 @@
 `define VX_DCR_MPM_CLASS_NONE           0
 `define VX_DCR_MPM_CLASS_CORE           1
 `define VX_DCR_MPM_CLASS_MEM            2
+`define VX_DCR_MPM_CLASS_3              3
+`define VX_DCR_MPM_CLASS_BRANCH         4
+
 
 // User Floating-Point CSRs ///////////////////////////////////////////////////
 
@@ -179,9 +182,17 @@
 `define VX_CSR_MPM_COALESCER_MISS       12'hB1F     // coalescer misses
 `define VX_CSR_MPM_COALESCER_MISS_H     12'hB9F
 
+`define VX_CSR_MPM_BRANCH_INSTRUCTIONS     12'hB05
+`define VX_CSR_MPM_BRANCH_INSTRUCTIONS_H   12'hB85
+`define VX_CSR_MPM_BRANCH_MISPREDICTIONS   12'hB06
+`define VX_CSR_MPM_BRANCH_MISPREDICTIONS_H 12'hB86
+
 // Machine Performance-monitoring memory counters (class 3) ///////////////////
 // <Add your own counters: use addresses hB03..B1F, hB83..hB9F>
-
+`define VX_CSR_MPM_TOTAL_ISSUED_WARPS     12'hB03
+`define VX_CSR_MPM_TOTAL_ISSUED_WARPS_H   12'hB83
+`define VX_CSR_MPM_TOTAL_ACTIVE_THREADS   12'hB04
+`define VX_CSR_MPM_TOTAL_ACTIVE_THREADS_H 12'hB84
 // Machine Information Registers //////////////////////////////////////////////
 
 `define VX_CSR_MVENDORID                12'hF11
@@ -221,4 +232,6 @@
 
 
 
-`endif // VX_TYPES_VH
+`endif
+ // VX_TYPES_VH
+ /* verilator lint_off EOFNEWLINE */

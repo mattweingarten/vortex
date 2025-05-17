@@ -57,28 +57,34 @@ public:
     uint64_t stores;
     uint64_t ifetch_latency;
     uint64_t load_latency;
+    uint64_t total_issued_warps;
+    uint64_t total_active_threads;
+    uint64_t branch_instructions;
+    uint64_t branch_mispredictions;
 
     PerfStats()
-      : cycles(0)
-      , instrs(0)
-      , sched_idle(0)
-      , sched_stalls(0)
-      , ibuf_stalls(0)
-      , scrb_stalls(0)
-      , opds_stalls(0)
-      , scrb_alu(0)
-      , scrb_fpu(0)
-      , scrb_lsu(0)
-      , scrb_sfu(0)
-      , scrb_csrs(0)
-      , scrb_wctl(0)
-      , ifetches(0)
-      , loads(0)
-      , stores(0)
-      , ifetch_latency(0)
-      , load_latency(0)
-    {}
-  };
+      : cycles(0), instrs(0), sched_idle(0), sched_stalls(0), ibuf_stalls(0),
+        scrb_stalls(0), opds_stalls(0), scrb_alu(0), scrb_fpu(0), scrb_lsu(0),
+        scrb_sfu(0), scrb_csrs(0), scrb_wctl(0), ifetches(0), loads(0), stores(0),
+        ifetch_latency(0), load_latency(0), total_issued_warps(0),
+        total_active_threads(0), branch_instructions(0), branch_mispredictions(0) {}
+
+    float get_branch_prediction_accuracy() const {
+        if (branch_instructions == 0)
+            return 100.0f;
+        uint64_t correct_predictions = branch_instructions - branch_mispredictions;
+        return (float)correct_predictions * 100.0f / branch_instructions;
+    }
+
+    void dump_branch_stats(std::ostream& os = std::cout) const {
+        os << "Branch Prediction Statistics:" << std::endl;
+        os << "  Total branch instructions: " << branch_instructions << std::endl;
+        os << "  Correct predictions: " << (branch_instructions - branch_mispredictions) << std::endl;
+        os << "  Mispredictions: " << branch_mispredictions << std::endl;
+        os << "  Prediction accuracy: " << get_branch_prediction_accuracy() << "%" << std::endl;
+    }
+};
+
 
   std::vector<SimPort<MemReq>> icache_req_ports;
   std::vector<SimPort<MemRsp>> icache_rsp_ports;
